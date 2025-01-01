@@ -765,7 +765,7 @@ _FX BOOLEAN WSA_GetProxyImpl(NETPROXY_RULE* WSA_Proxy, const short *addr, int ad
     if (!WSA_Proxy)
         return FALSE;
 
-    // check if there are any IP's specified for which wes should bypass the proxy
+    // check if there are any IPs specified for which we should bypass the proxy
     if (WSA_Proxy->ip_map.count > 0) {
         IP_ADDRESS ip;
         if (WSA_GetIP(addr, addrlen, &ip)) {
@@ -1415,7 +1415,7 @@ _FX BOOLEAN WSA_InitNetProxy()
         return FALSE;
 
     SCertInfo CertInfo = { 0 };
-    if (!NT_SUCCESS(SbieApi_Call(API_QUERY_DRIVER_INFO, 3, -1, (ULONG_PTR)&CertInfo, sizeof(CertInfo))) || !CERT_IS_LEVEL(CertInfo, eCertAdvanced)) {
+    if (!NT_SUCCESS(SbieApi_QueryDrvInfo(-1, &CertInfo, sizeof(CertInfo))) || !CertInfo.opt_net) {
 
         const WCHAR* strings[] = { L"NetworkUseProxy" , NULL };
         SbieApi_LogMsgExt(-1, 6009, strings);

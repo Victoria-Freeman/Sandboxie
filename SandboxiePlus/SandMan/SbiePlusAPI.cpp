@@ -3,14 +3,24 @@
 #include "SbieProcess.h"
 #include "SandMan.h"
 #include "..\MiscHelpers\Common\Common.h"
+
+#include <ntstatus.h>
+#define WIN32_NO_STATUS
+typedef long NTSTATUS;
+
 #include <windows.h>
 #include <Shlobj_core.h>
+
 #include "BoxMonitor.h"
 #include "..\MiscHelpers\Common\OtherFunctions.h"
 #include "../QSbieAPI/SbieUtils.h"
 #include "../MiscHelpers/Archive/Archive.h"
 #include <QtConcurrent>
 #include "Helpers/WinHelper.h"
+
+#include "..\..\Sandboxie\common\win32_ntddk.h"
+
+#include "../QSbieAPI/Helpers/NtIO.h"
 
 CSbiePlusAPI::CSbiePlusAPI(QObject* parent) : CSbieAPI(parent)
 {
@@ -280,7 +290,7 @@ SB_PROGRESS CSandBoxPlus::ExportBox(const QString& FileName, const QString& Pass
 	if (!IsInitialized())
 		return SB_ERR(SB_SnapIsEmpty); // todo
 
-	QString Section = theAPI->SbieIniGetEx(m_Name, "");
+	QString Section = SbieIniGetEx(m_Name, "");
 
 	QVariantMap vParams;
 	if (!Password.isEmpty())
@@ -353,6 +363,40 @@ SB_PROGRESS CSandBoxPlus::ImportBox(const QString& FileName, const QString& Pass
 
 	CSbieProgressPtr pProgress = CSbieProgressPtr(new CSbieProgress());
 	QtConcurrent::run(CSandBoxPlus::ImportBoxAsync, pProgress, FileName, m_FilePath, m_Name, Password);
+	return SB_PROGRESS(OP_ASYNC, pProgress);
+}
+
+SB_STATUS CSandBoxPlus_CopyFolder(const CSbieProgressPtr& pProgress, const QString& SourcePath, const QString& DestinationPath)
+{
+	SNtObject src_dir(L"\\??\\" + SourcePath.toStdWString());
+	SNtObject dest_dir(L"\\??\\" + DestinationPath.toStdWString());
+	NTSTATUS status = NtIo_CopyFolder(&src_dir.attr, &dest_dir.attr, [](const WCHAR* info, void* param) {
+		CSbieProgress* pProgress = (CSbieProgress*)param;
+		pProgress->ShowMessage(CSandBox::tr("Copying folder: %1").arg(QString::fromWCharArray(info)));
+		return !pProgress->IsCanceled();
+	}, pProgress.data());
+	if (!NT_SUCCESS(status) && status != STATUS_OBJECT_NAME_NOT_FOUND && status != STATUS_OBJECT_PATH_NOT_FOUND)
+		return SB_ERR((ESbieMsgCodes)SBX_FailedCopyDir, QVariantList() << SourcePath << DestinationPath, status);
+	return SB_OK;
+}
+
+void CSandBoxPlus::CopyBoxAsync(const CSbieProgressPtr& pProgress, const QString& SrcDir, const QString& DestDir)
+{
+	SB_STATUS Status = CSandBoxPlus_CopyFolder(pProgress, SrcDir, DestDir);
+
+	pProgress->Finish(Status);
+}
+
+SB_PROGRESS CSandBoxPlus::CopyBox(const QString& DestDir)
+{
+	if (theAPI->HasProcesses(m_Name))
+		return SB_ERR(SB_SnapIsRunning); // todo
+
+	if (!IsInitialized())
+		return SB_OK; // nothing to do
+
+	CSbieProgressPtr pProgress = CSbieProgressPtr(new CSbieProgress());
+	QtConcurrent::run(CSandBoxPlus::CopyBoxAsync, pProgress, GetFileRoot(), DestDir);
 	return SB_PROGRESS(OP_ASYNC, pProgress);
 }
 
@@ -766,7 +810,8 @@ bool CSandBoxPlus::CheckUnsecureConfig() const
 {
 	//if (GetBool("UnsafeTemplate", false, true, true)) return true;
 	if (GetBool("OriginalToken", false, true, true)) return true;
-	if (GetBool("OpenToken", false, true, true)) return true;
+	if (GetBool("OpenAllSysCalls", false, true, true)) return true;
+	//if (GetBool("OpenToken", false, true, true)) return true; // not present
 		if(GetBool("UnrestrictedToken", false, true, true)) return true;
 			if (GetBool("KeepTokenIntegrity", false, true, true)) return true;
 			if (GetBool("UnstrippedToken", false, true, true)) return true;
@@ -782,48 +827,59 @@ bool CSandBoxPlus::CheckUnsecureConfig() const
 
 QString CSandBoxPlus::GetStatusStr() const
 {
+	QString StatusStr;
 	if (!m_IsEnabled)
-		return tr("Disabled");
+		StatusStr = tr("Disabled");
+	else if (!m_StatusStr.isEmpty())
+		StatusStr = m_StatusStr;
+	else
+	{
+		QStringList Status;
 
-	if (!m_StatusStr.isEmpty())
-		return m_StatusStr;
+		//if (m_IsEmpty)
+		//	Status.append(tr("Empty"));
 
-	QStringList Status;
+		if (m_bRootAccessOpen)
+			Status.append(tr("OPEN Root Access"));
+		else if (m_bApplicationCompartment)
+			Status.append(tr("Application Compartment"));
+		else if (m_iUnsecureDebugging == 1)
+			Status.append(tr("NOT SECURE"));
+		else if (m_iUnsecureDebugging == 2)
+			Status.append(tr("Reduced Isolation"));
+		else if (m_bSecurityEnhanced)
+			Status.append(tr("Enhanced Isolation"));
 
-	//if (m_IsEmpty)
-	//	Status.append(tr("Empty"));
+		if (m_bPrivacyEnhanced)
+			Status.append(tr("Privacy Enhanced"));
 
-	if (m_bRootAccessOpen)
-		Status.append(tr("OPEN Root Access"));
-	else if (m_bApplicationCompartment)
-		Status.append(tr("Application Compartment"));
-	else if (m_iUnsecureDebugging == 1)
-		Status.append(tr("NOT SECURE"));
-	else if (m_iUnsecureDebugging == 2)
-		Status.append(tr("Reduced Isolation"));
-	else if(m_bSecurityEnhanced)
-		Status.append(tr("Enhanced Isolation"));
-	
-	if(m_bPrivacyEnhanced)
-		Status.append(tr("Privacy Enhanced"));
+		if (m_bINetBlocked) {
+			if (m_bINetExceptions)
+				Status.append(tr("No INet (with Exceptions)"));
+			else
+				Status.append(tr("No INet"));
+		}
+		if (m_bSharesAllowed)
+			Status.append(tr("Net Share"));
+		if (m_bDropRights && !m_bSecurityEnhanced)
+			Status.append(tr("No Admin"));
 
-	if (m_bINetBlocked) {
-		if(m_bINetExceptions)
-			Status.append(tr("No INet (with Exceptions)"));
+		if (m_BoxDel)
+			Status.append(tr("Auto Delete"));
+
+		if (!Status.isEmpty())
+			StatusStr = Status.join(", ");
 		else
-			Status.append(tr("No INet"));
+			StatusStr = tr("Normal");
 	}
-	if (m_bSharesAllowed)
-		Status.append(tr("Net Share"));
-	if (m_bDropRights && !m_bSecurityEnhanced)
-		Status.append(tr("No Admin"));
 
-	if(m_BoxDel)
-		Status.append(tr("Auto Delete"));
+	if(!m_PortablePath.isEmpty())
+		StatusStr += tr(" (Portable)");
 
-	if (Status.isEmpty())
-		return tr("Normal");
-	return Status.join(", ");
+	if(m_IsVirtual)
+		StatusStr += tr(" (Virtual)");
+
+	return StatusStr;
 }
 
 CSandBoxPlus::EBoxTypes CSandBoxPlus::GetTypeImpl() const
@@ -1148,6 +1204,8 @@ void CSandBoxPlus::OnCancelAsync()
 QString CSandBoxPlus::MakeBoxCommand(const QString& FileName)
 {
 	QString BoxFileName = FileName;
+	if (!BoxFileName.contains("\""))
+		BoxFileName = "\"" + BoxFileName + "\"";
 	//if (BoxFileName.indexOf(m_FilePath, Qt::CaseInsensitive) == 0) {
 	//	BoxFileName.remove(0, m_FilePath.length());
 	//	if (BoxFileName.at(0) != '\\')
@@ -1207,6 +1265,12 @@ typedef long NTSTATUS;
 
 void CSbieTemplatesEx::CollectUpdates()
 {
+	if (theConf->GetInt("Options/ScanWindowsUpdates", 1) == 0)
+		return;
+
+	theConf->SetValue("Options/ScanWindowsUpdates", 2);
+	theConf->Sync();
+
 	IUpdateSession* updateSession = NULL;
 	IUpdateSearcher* updateSearcher = NULL;
 	ISearchResult* searchResult = NULL;
@@ -1306,6 +1370,9 @@ cleanup:
 	if (updateSession != NULL) updateSession->Release();
 
 	CoUninitialize();
+
+	theConf->SetValue("Options/ScanWindowsUpdates", 1);
+	theConf->Sync();
 }
 
 void CSbieTemplatesEx::Reset()

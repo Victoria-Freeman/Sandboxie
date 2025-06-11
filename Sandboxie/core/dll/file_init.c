@@ -132,6 +132,7 @@ _FX BOOLEAN File_Init(void)
     void *RtlGetFullPathName_UEx;
     void *GetTempPathW;
     void *NtQueryDirectoryFileEx = NULL;
+    void *NtQueryInformationByName = NULL;
     InitializeCriticalSection(&File_CurDir_CritSec);
 
     InitializeCriticalSection(&File_DirHandles_CritSec);
@@ -228,6 +229,13 @@ _FX BOOLEAN File_Init(void)
     SBIEDLL_HOOK(File_,NtOpenFile);
     SBIEDLL_HOOK(File_,NtQueryAttributesFile);
     SBIEDLL_HOOK(File_,NtQueryFullAttributesFile);
+
+    NtQueryInformationByName = GetProcAddress(Dll_Ntdll, "NtQueryInformationByName");
+    if (NtQueryInformationByName) {
+
+        SBIEDLL_HOOK(File_, NtQueryInformationByName);
+    }
+
     SBIEDLL_HOOK(File_,NtQueryInformationFile);
     SBIEDLL_HOOK(File_,NtQueryDirectoryFile);
     SBIEDLL_HOOK(File_,NtSetInformationFile);
@@ -283,22 +291,19 @@ _FX BOOLEAN File_Init(void)
     }
 
     // $Workaround$ - 3rd party fix
-    if (!Dll_CompartmentMode) {
+    //
+    // support for Google Chrome flash plugin process
+    //
+    // $Workaround$ - 3rd party fix
+    //void *GetVolumeInformationW =
+    //    GetProcAddress(Dll_KernelBase ? Dll_KernelBase : Dll_Kernel32,
+    //        "GetVolumeInformationW");
+    //SBIEDLL_HOOK(File_,GetVolumeInformationW);
 
-        //
-        // support for Google Chrome flash plugin process
-        //
-        // $Workaround$ - 3rd party fix
-        //void *GetVolumeInformationW =
-        //    GetProcAddress(Dll_KernelBase ? Dll_KernelBase : Dll_Kernel32,
-        //        "GetVolumeInformationW");
-        //SBIEDLL_HOOK(File_,GetVolumeInformationW);
-
-        void* WriteProcessMemory =
-            GetProcAddress(Dll_KernelBase ? Dll_KernelBase : Dll_Kernel32,
-                "WriteProcessMemory");
-        SBIEDLL_HOOK(File_, WriteProcessMemory);
-    }
+    void* WriteProcessMemory =
+        GetProcAddress(Dll_KernelBase ? Dll_KernelBase : Dll_Kernel32,
+            "WriteProcessMemory");
+    SBIEDLL_HOOK(File_, WriteProcessMemory);
 
     return TRUE;
 }

@@ -117,6 +117,7 @@ CTraceTree::CTraceTree(QWidget* parent)
 	//m_pMainLayout->addWidget(CFinder::AddFinder(m_pTreeList, this, CFinder::eHighLightDefault, &pFinder));
 	m_pSplitter->addWidget(CFinder::AddFinder(m_pTreeList, this, CFinder::eHighLightDefault, &pFinder));
 	pFinder->SetModel(m_pTraceModel);
+	pFinder->SetAlwaysRaw();
 	//QObject::connect(pFinder, SIGNAL(SelectNext()), this, SLOT(SelectNext()));
 
 
@@ -146,14 +147,13 @@ CTraceTree::~CTraceTree()
 	theConf->SetBlob("MainWindow/TraceSplitter", m_pSplitter->saveState());
 }
 
-void CTraceTree::SetFilter(const QString& Exp, int iOptions, int Column) 
+void CTraceTree::SetFilter(const QRegularExpression& Exp, int iOptions, int Column) 
 {
-	bool bReset = m_bHighLight != ((iOptions & CFinder::eHighLight) != 0) || (!m_bHighLight && m_FilterExp != Exp);
+	QString ExpStr = Exp.pattern();
+	bool bReset = m_bHighLight != ((iOptions & CFinder::eHighLight) != 0) || (!m_bHighLight && m_FilterExp != ExpStr);
 
-	//QString ExpStr = ((iOptions & CFinder::eRegExp) == 0) ? Exp : (".*" + QRegularExpression::escape(Exp) + ".*");
-	//QRegularExpression RegExp(ExpStr, (iOptions & CFinder::eCaseSens) != 0 ? QRegularExpression::NoPatternOption : QRegularExpression::CaseInsensitiveOption);
 	//m_FilterExp = RegExp;
-	m_FilterExp = Exp;
+	m_FilterExp = ExpStr;
 	m_bHighLight = (iOptions & CFinder::eHighLight) != 0;
 	//m_FilterCol = Col;
 
@@ -183,7 +183,7 @@ void CTraceTree::ItemSelection(const QItemSelection& selected, const QItemSelect
 // CMonitorList
 
 CMonitorList::CMonitorList(QWidget* parent) 
-	: CPanelWidget<QTreeViewEx>(parent) 
+	: CPanelWidgetTmpl<QTreeViewEx>(NULL, parent) 
 {
 	m_pTreeList->setAlternatingRowColors(theConf->GetBool("Options/AltRowColors", false));
 
@@ -288,7 +288,7 @@ CTraceView::CTraceView(bool bStandAlone, QWidget* parent) : QWidget(parent)
 	m_pTraceType->setNoneCheckedText(tr("[All]"));
 	foreach(quint32 type, CTraceEntry::AllTypes()) 
 		m_pTraceType->addCheckItem(CTraceEntry::GetTypeStr(type), type, Qt::Unchecked);
-	m_pTraceType->setMinimumWidth(100);
+	m_pTraceType->adjustWidthForItems();
 	connect(m_pTraceType, SIGNAL(globalCheckStateChanged(int)), this, SLOT(OnSetFilter()));
 	m_pTraceToolBar->addWidget(m_pTraceType);
 
@@ -468,9 +468,11 @@ void CTraceView::Refresh()
 
 		if (bMonitorMode)
 		{
-			CMonitorEntryPtr& pItem = m_MonitorMap[pEntry->GetName().toLower()];
+			QString Name = pEntry->GetName();
+			if (Name.isEmpty())
+				Name = pEntry->GetMessage();
+			CMonitorEntryPtr& pItem = m_MonitorMap[Name.toLower()];
 			if (pItem.data() == NULL) {
-				QString Name = pEntry->GetName();
 				//if (Name.left(9).compare("\\REGISTRY", Qt::CaseInsensitive) == 0) {
 				//	int pos = Name.indexOf("\\", 10);
 				//	Name = Name.left(pos).toUpper() + Name.mid(pos);

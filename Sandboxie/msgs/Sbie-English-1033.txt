@@ -336,6 +336,22 @@ SBIE1411 Sandbox %2 specifies unknown template %3
 SBIE1412 In text: %2
 .
 
+1413;evt;pop;wrn;01
+SBIE1413 The box include folder %3 file cannot be opened, error %2
+.
+
+1414;evt;pop;wrn;01
+SBIE1414 The following message indicates an error %2 in a box include %3
+.
+
+1415;evt;pop;wrn;01
+SBIE1415 Portable box name mismatch (ini name must match box section) in a box include %3
+.
+
+1416;evt;pop;wrn;01
+SBIE1416 Portable box name is already in use by another box, include %3
+.
+
 #----------------------------------------------------------------------------
 # SbieDrv
 #
@@ -733,6 +749,18 @@ SBIE2326 Cannot prepare registry:  %2
 SBIE2327 Error in COM server:  %2
 .
 
+2328;pop;err;01
+SBIE2328 Failed to resolve chrome sandbox hook %2
+.
+
+2329;pop;err;01
+SBIE2329 Failed to find FFS sequence %2
+.
+
+2330;pop;err;01
+SBIE2330 Unspecified error when hooking %2
+.
+
 2331;pop;err;01
 SBIE2331 Service start failed:  %2
 .
@@ -1017,7 +1045,7 @@ Please terminate programs running in the sandbox before deleting its contents
 .
 
 3222;txt;01
-Delete command failed:  %0
+Delete command failed: %2
 .
 
 # 3231;txt;01
@@ -1071,8 +1099,40 @@ User Account Control pop-up window.
 .
 
 3243;txt;01
-Note:  The program will continue to execute under the supervision
-of Sandboxie, even after Administrator privileges have been granted.
+Note:  The program will continue to run under the supervision
+of Sandboxie even if Administrator privileges are granted.
+However, granting Administrator rights may increase the risk
+of the application exploiting an unpatched Windows vulnerability
+or a vulnerable driver to escape the sandbox.
+.
+
+#3244;txt;01
+#Application %2 is requesting Administrator privileges in box %3. 
+#You can allow this request (YES), in which case a UAC prompt may appear depending on your system settings. 
+#You can deny Administrator privileges but make the application believe it has them (NO), or you can abort the startup (CANCEL). 
+#
+#Note: The program will continue to run under the supervision of Sandboxie even if Administrator privileges are granted. 
+#However, granting real Administrator rights may increase the risk of the application exploiting an unpatched Windows vulnerability or a vulnerable driver to escape the sandbox. 
+#Therefore, it is generally safer to grant only fake Administrator rights, although this may cause some installers to fail.
+#.
+
+3244;txt;01
+Application %2 is requesting Administrator privileges in sandbox:
+.
+
+3245;txt;01
+You can allow this request (YES), in which case a UAC prompt may 
+appear depending on your system settings. You can deny Administrator 
+privileges but make the application believe it has them (NO), or you can 
+abort the startup (CANCEL). 
+.
+
+3246;txt;01
+Note:  The program will continue to run under the supervision of Sandboxie even if Administrator 
+privileges are granted. However, granting real Administrator rights may increase the risk of the 
+application exploiting an unpatched Windows vulnerability or a vulnerable driver to escape the 
+sandbox. Therefore, it is generally safer to grant only fake Administrator rights, 
+although this may cause some installers to fail.
 .
 
 3251;txt;01

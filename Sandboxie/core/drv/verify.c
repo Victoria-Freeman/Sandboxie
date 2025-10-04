@@ -1097,8 +1097,7 @@ CleanupExit:
     if(stream)      Stream_Close(stream);
 	
 	Verify_CertInfo.type = eCertBusiness;
-	Verify_CertInfo.valid = 1;
-	Verify_CertInfo.business = 1;
+	Verify_CertInfo.active = 1;
     return 1;
 }
 
